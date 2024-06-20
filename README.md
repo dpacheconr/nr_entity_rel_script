@@ -8,7 +8,6 @@
 ## Running local
 
 1. Ensure you've created the required variables 
-    > export NEWRELIC_ACCOUNT_ID=
-    > export NEWRELIC_USER_KEY=""
+    > export NEWRELIC_ACCOUNT_ID=YOURACCOUNTID && export NEWRELIC_USER_KEY="YOURAPIKEY"
 2. Run script
     > python3 app.py
