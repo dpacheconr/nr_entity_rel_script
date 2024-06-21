@@ -2,15 +2,14 @@ import os
 from nr_graphql import nr_graphql
 
 
-account_id = os.getenv('NEWRELIC_ACCOUNT_ID')
-newrelic_user_key = os.getenv('NEWRELIC_USER_KEY') 
+newrelic_user_key = os.getenv('NEW_RELIC_USER_KEY') 
 
 current_configurations = {}
 env_vars_checked = False
 
 def check_env_vars():
     global env_vars_checked
-    keys = ("NEWRELIC_ACCOUNT_ID","NEWRELIC_USER_KEY")
+    keys = ("NEW_RELIC_USER_KEY",)
     keys_not_set = []
 
     for key in keys:
@@ -28,65 +27,20 @@ def check_env_vars():
         print("All REQUIRED environment variables set, starting...")
 
 def query(nrql_query):
-    query_result = nr_graphql.run_query(newrelic_user_key,account_id,nrql_query)
+    query_result = nr_graphql.run_query(newrelic_user_key,nrql_query)
     return query_result
 
 
 if not env_vars_checked:
     check_env_vars()
-    
-# Grab entities that match
-nrql_query_1="""
-            {
-            actor {
-                entitySearch(
-                    queryBuilder: {tags: {key: "k8s.deployment.name", value: "newrelic-otel-accountingservice"}} ) {
-                results {
-                    entities {
-                    name
-                    entityType
-                    guid
-                    }
-                }
-                }
-            }
-            }
-        """
 
-entities=query(nrql_query_1)
-entities_json=entities['actor']['entitySearch']['results']['entities']
-entityone=entities_json[0]['guid']
-
-       
-# Grab entities that match
-nrql_query_2="""
-            {
-            actor {
-                entitySearch(
-                    queryBuilder: {tags: {key: "k8s.deployment.name", value: "newrelic-otel-cartservice"}} ) {
-                results {
-                    entities {
-                    name
-                    entityType
-                    guid
-                    }
-                }
-                }
-            }
-            }
-        """
-entities=query(nrql_query_2)
-entities_json=entities['actor']['entitySearch']['results']['entities']
-entitytwo=entities_json[0]['guid']
-
-
-# Create relationship
-nrql_query_3="""
+def create_relationship(sourceEntityGuid,targetEntityGuid):
+    nrql_query="""
             mutation {
             entityRelationshipUserDefinedCreateOrReplace(
-                sourceEntityGuid: """+"\""+str(entityone)+"\""+"""
-                targetEntityGuid:  """+"\""+str(entitytwo)+"\""+"""
-                type: CALLS
+                sourceEntityGuid: """+"\""+str(sourceEntityGuid)+"\""+"""
+                targetEntityGuid:  """+"\""+str(targetEntityGuid)+"\""+"""
+                type: CONSUMES
             ){
             errors {
             message
@@ -95,7 +49,70 @@ nrql_query_3="""
             }
             }
         """
+    print(nrql_query)
 
-relationship_response=query(nrql_query_3)
-relationship_response_json=relationship_response
-print(relationship_response_json)
+
+# Grab GCP_PUB_SUB_TOPICS
+nrql_query_1="""
+            {
+            actor {
+                entitySearch(queryBuilder: {infrastructureIntegrationType: GCP_PUB_SUB_TOPIC}) {
+                results {
+                    entities {
+                    name
+                    entityType
+                    guid
+                    tags {
+                        key
+                        values
+                    }
+                    }
+                }
+                }
+            }
+            }
+        """
+parsed_entities1={}
+entities1=query(nrql_query_1)
+entities1_json=entities1['actor']['entitySearch']['results']['entities']
+for entity in entities1_json:
+    for tag in entity['tags']:
+        if tag ['key'] == 'gcp.topicId':
+            parsed_entities1[tag['values'][0]] = {"guid": entity['guid'],"name": entity['name']}
+            
+    
+# Grab GCP_PUB_SUB_SUBSCRIPTION
+nrql_query_2="""
+            {
+            actor {
+                entitySearch(
+                queryBuilder: {infrastructureIntegrationType: GCP_PUB_SUB_SUBSCRIPTION}
+                ) {
+                results {
+                    entities {
+                    name
+                    entityType
+                    guid
+                    tags {
+                        key
+                        values
+                    }
+                    }
+                }
+                }
+            }
+        }
+        """
+parsed_entities2={}
+entities2=query(nrql_query_2)
+entities2_json=entities2['actor']['entitySearch']['results']['entities']
+for entity in entities2_json:
+    for tag in entity['tags']:
+        if tag ['key'] == 'gcp.topicId':
+            parsed_entities2[str(tag['values'][0]).split("/")[3]] = {"guid": entity['guid'],"name": entity['name']}
+
+# Check each subscription topicId for matching topic
+for entity in parsed_entities2:
+    if entity in parsed_entities1:
+        print(parsed_entities2[entity],parsed_entities2[entity])
+
