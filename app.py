@@ -6,6 +6,7 @@ newrelic_user_key = os.getenv('NEW_RELIC_USER_KEY')
 
 current_configurations = {}
 env_vars_checked = False
+dry_run = True
 
 def check_env_vars():
     global env_vars_checked
@@ -49,7 +50,7 @@ def create_relationship(sourceEntityGuid,targetEntityGuid):
             }
             }
         """
-    print(nrql_query)
+    query(nrql_query)
 
 
 # Grab GCP_PUB_SUB_TOPICS
@@ -114,5 +115,9 @@ for entity in entities2_json:
 # Check each subscription topicId for matching topic
 for entity in parsed_entities2:
     if entity in parsed_entities1:
-        print(parsed_entities2[entity],parsed_entities2[entity])
+        if dry_run:
+            print("Entity",parsed_entities2[entity]['name'],"will consume",parsed_entities1[entity]['name'],end="\n\n")
+        else:
+            create_relationship(parsed_entities2[entity]['guid'],parsed_entities1[entity]['guid'])
+        
 
